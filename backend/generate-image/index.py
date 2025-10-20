@@ -6,8 +6,7 @@ from typing import Dict, Any
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     '''
     Business: Generate AI images using fal.ai API
-    Args: event with httpMethod, body containing prompt
-          context with request_id attribute
+    Args: event with httpMethod (POST for generation, OPTIONS for CORS), body with prompt
     Returns: HTTP response with generated image URL
     '''
     method: str = event.get('httpMethod', 'GET')
@@ -36,23 +35,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
-    body_str = event.get('body', '{}')
-    if not body_str or body_str == '':
-        body_str = '{}'
-    body_data = json.loads(body_str)
-    prompt: str = body_data.get('prompt', '')
-    
-    if not prompt:
-        return {
-            'statusCode': 400,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'Prompt is required'}),
-            'isBase64Encoded': False
-        }
-    
     fal_api_key = os.environ.get('FAL_API_KEY')
     if not fal_api_key:
         return {
@@ -65,29 +47,43 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
-    response = requests.post(
-        'https://fal.run/fal-ai/flux/schnell',
-        headers={
-            'Authorization': f'Key {fal_api_key}',
-            'Content-Type': 'application/json'
-        },
-        json={
-            'prompt': prompt,
-            'image_size': 'square',
-            'num_inference_steps': 4,
-            'num_images': 1
-        },
-        timeout=60
-    )
+    body_data = json.loads(event.get('body', '{}'))
+    prompt = body_data.get('prompt', '')
     
-    if response.status_code != 200:
+    if not prompt:
         return {
-            'statusCode': 500,
+            'statusCode': 400,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            'body': json.dumps({'error': 'Image generation failed'}),
+            'body': json.dumps({'error': 'Prompt is required'}),
+            'isBase64Encoded': False
+        }
+    
+    fal_url = 'https://fal.run/fal-ai/flux/schnell'
+    headers = {
+        'Authorization': f'Key {fal_api_key}',
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        'prompt': prompt,
+        'image_size': 'square_hd',
+        'num_inference_steps': 4,
+        'num_images': 1
+    }
+    
+    response = requests.post(fal_url, headers=headers, json=payload, timeout=60)
+    
+    if response.status_code != 200:
+        return {
+            'statusCode': response.status_code,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({'error': f'FAL API error: {response.text}'}),
             'isBase64Encoded': False
         }
     
@@ -100,6 +96,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
         },
-        'body': json.dumps({'imageUrl': image_url}),
+        'body': json.dumps({
+            'success': True,
+            'image_url': image_url,
+            'prompt': prompt
+        }),
         'isBase64Encoded': False
     }

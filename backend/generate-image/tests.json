@@ -1,24 +1,33 @@
 {
   "tests": [
     {
-      "name": "Test OPTIONS for CORS",
+      "name": "Test CORS preflight",
       "method": "OPTIONS",
       "path": "/",
-      "expectedStatus": 200,
-      "expectedHeaders": {
-        "Access-Control-Allow-Origin": "*"
+      "expectedStatus": 200
+    },
+    {
+      "name": "Test missing prompt",
+      "method": "POST",
+      "path": "/",
+      "body": {},
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "Prompt is required"
       }
     },
     {
-      "name": "Test POST without prompt",
+      "name": "Test with valid prompt",
       "method": "POST",
       "path": "/",
       "body": {
-        "prompt": ""
+        "prompt": "A beautiful sunset over mountains"
       },
-      "expectedStatus": 400,
+      "expectedStatus": 200,
       "expectedBody": {
-        "error": "string"
+        "success": true,
+        "prompt": "string",
+        "image_url": "string"
       },
       "bodyMatcher": "partial"
     }

@@ -189,9 +189,11 @@ export default function Index() {
                               body: JSON.stringify({ prompt })
                             });
                             const data = await response.json();
-                            if (data.imageUrl) {
-                              setGeneratedImage(data.imageUrl);
+                            if (data.image_url) {
+                              setGeneratedImage(data.image_url);
                               toast({ title: '✨ Изображение создано!' });
+                            } else if (data.error) {
+                              toast({ title: data.error, variant: 'destructive' });
                             }
                           } catch (error) {
                             toast({ title: 'Ошибка генерации', variant: 'destructive' });
