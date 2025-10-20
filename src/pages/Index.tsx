@@ -4,10 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
 export default function Index() {
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [prompt, setPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const promptCategories = [
     { id: 'all', name: 'Все', icon: 'Sparkles' },
@@ -158,8 +164,70 @@ export default function Index() {
               <TabsContent value="images" className="space-y-6 animate-fade-in">
                 <Card className="border-primary/20">
                   <CardHeader>
+                    <CardTitle>Создать изображение</CardTitle>
+                    <CardDescription>Опишите что хотите увидеть</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <Textarea 
+                        placeholder="Например: Киберпанк город с неоновыми огнями, футуристические небоскрёбы..."
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        className="min-h-[100px] resize-none"
+                      />
+                      <Button 
+                        onClick={async () => {
+                          if (!prompt.trim()) {
+                            toast({ title: 'Введите описание изображения', variant: 'destructive' });
+                            return;
+                          }
+                          setIsGenerating(true);
+                          try {
+                            const response = await fetch('https://functions.poehali.dev/092e5639-b508-4937-99d6-0da38ded9446', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ prompt })
+                            });
+                            const data = await response.json();
+                            if (data.imageUrl) {
+                              setGeneratedImage(data.imageUrl);
+                              toast({ title: '✨ Изображение создано!' });
+                            }
+                          } catch (error) {
+                            toast({ title: 'Ошибка генерации', variant: 'destructive' });
+                          } finally {
+                            setIsGenerating(false);
+                          }
+                        }}
+                        disabled={isGenerating}
+                        className="w-full bg-gradient-to-r from-primary to-secondary"
+                        size="lg"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Icon name="Loader2" className="mr-2 animate-spin" size={20} />
+                            Генерирую...
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="Sparkles" className="mr-2" size={20} />
+                            Создать изображение
+                          </>
+                        )}
+                      </Button>
+                      {generatedImage && (
+                        <div className="rounded-lg overflow-hidden border border-primary/40 animate-scale-in">
+                          <img src={generatedImage} alt="Generated" className="w-full" />
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="border-primary/20">
+                  <CardHeader>
                     <CardTitle>Библиотека промптов</CardTitle>
-                    <CardDescription>Выберите готовый промпт или создайте свой</CardDescription>
+                    <CardDescription>Или выберите готовый шаблон</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2 mb-6">
@@ -177,15 +245,19 @@ export default function Index() {
                       ))}
                     </div>
                     <div className="grid md:grid-cols-2 gap-4">
-                      {filteredPrompts.map(prompt => (
-                        <Card key={prompt.id} className="hover:border-primary/40 transition-all cursor-pointer group">
+                      {filteredPrompts.map(promptItem => (
+                        <Card key={promptItem.id} className="hover:border-primary/40 transition-all cursor-pointer group">
                           <CardHeader>
                             <div className="flex items-start justify-between">
                               <div>
-                                <CardTitle className="text-base mb-1">{prompt.title}</CardTitle>
-                                <CardDescription className="text-sm">{prompt.prompt}</CardDescription>
+                                <CardTitle className="text-base mb-1">{promptItem.title}</CardTitle>
+                                <CardDescription className="text-sm">{promptItem.prompt}</CardDescription>
                               </div>
-                              <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button 
+                                size="sm" 
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => setPrompt(promptItem.prompt)}
+                              >
                                 <Icon name="Wand2" size={16} />
                               </Button>
                             </div>
