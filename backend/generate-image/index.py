@@ -1,11 +1,12 @@
 import json
 import os
 import requests
+import time
 from typing import Dict, Any
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     '''
-    Business: Generate AI images using fal.ai API
+    Business: Generate AI images using Replicate API
     Args: event with httpMethod (POST for generation, OPTIONS for CORS), body with prompt
     Returns: HTTP response with generated image URL
     '''
@@ -35,15 +36,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
-    fal_api_key = os.environ.get('FAL_API_KEY')
-    if not fal_api_key:
+    api_token = os.environ.get('REPLICATE_API_TOKEN')
+    if not api_token:
         return {
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            'body': json.dumps({'error': 'FAL_API_KEY not configured'}),
+            'body': json.dumps({'error': 'REPLICATE_API_TOKEN not configured'}),
             'isBase64Encoded': False
         }
     
@@ -61,45 +62,91 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
-    fal_url = 'https://fal.run/fal-ai/flux/schnell'
     headers = {
-        'Authorization': f'Key {fal_api_key}',
+        'Authorization': f'Bearer {api_token}',
         'Content-Type': 'application/json'
     }
     
     payload = {
+        'version': 'black-forest-labs/flux-schnell:bf0d425e5b63c25c9b23c2c6ee8ca154c9c31c0fbc4e9a39bfed2b6c1b41',
         'prompt': prompt,
-        'image_size': 'square_hd',
-        'num_inference_steps': 4,
-        'num_images': 1
+        'aspect_ratio': '1:1',
+        'output_format': 'jpg',
+        'output_quality': 90
     }
     
-    response = requests.post(fal_url, headers=headers, json=payload, timeout=60)
+    response = requests.post(
+        'https://api.replicate.com/v1/predictions',
+        headers=headers,
+        json={'input': payload},
+        timeout=10
+    )
     
-    if response.status_code != 200:
+    if response.status_code != 201:
         return {
             'statusCode': response.status_code,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            'body': json.dumps({'error': f'FAL API error: {response.text}'}),
+            'body': json.dumps({'error': f'Replicate API error: {response.text}'}),
             'isBase64Encoded': False
         }
     
-    result = response.json()
-    image_url = result.get('images', [{}])[0].get('url', '')
+    prediction = response.json()
+    prediction_id = prediction.get('id')
+    
+    max_attempts = 30
+    for _ in range(max_attempts):
+        time.sleep(2)
+        
+        status_response = requests.get(
+            f'https://api.replicate.com/v1/predictions/{prediction_id}',
+            headers=headers,
+            timeout=10
+        )
+        
+        if status_response.status_code != 200:
+            continue
+            
+        status_data = status_response.json()
+        status = status_data.get('status')
+        
+        if status == 'succeeded':
+            output = status_data.get('output')
+            image_url = output[0] if isinstance(output, list) and output else output
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'success': True,
+                    'image_url': image_url,
+                    'prompt': prompt
+                }),
+                'isBase64Encoded': False
+            }
+        
+        if status == 'failed':
+            return {
+                'statusCode': 500,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'error': 'Image generation failed'}),
+                'isBase64Encoded': False
+            }
     
     return {
-        'statusCode': 200,
+        'statusCode': 408,
         'headers': {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
         },
-        'body': json.dumps({
-            'success': True,
-            'image_url': image_url,
-            'prompt': prompt
-        }),
+        'body': json.dumps({'error': 'Generation timeout'}),
         'isBase64Encoded': False
     }
